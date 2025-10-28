@@ -1,0 +1,9 @@
+.env
+.env.local
+node_modules
+dist
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
