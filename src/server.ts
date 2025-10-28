@@ -6,6 +6,9 @@ import { addDomainHandler } from "./http/domain/add";
 import { registerUserHandler } from "./http/users/register";
 import { getAllUsersHandler } from "./http/users/list";
 import { getUserByUUIDHandler } from "./http/users/get";
+import { putUserHandler } from "./http/users/put";
+import { patchUserHandler } from "./http/users/patch";
+import { deleteUserHandler } from "./http/users/delete";
 import { loginHandler, tokenHandler } from "./http/users/login";
 
 async function main() {
@@ -30,6 +33,9 @@ async function main() {
 	api.post("/auth/token", tokenHandler);
 	api.get("/users/all", getAllUsersHandler);
 	api.get("/users/:uuid", getUserByUUIDHandler);
+	api.put("/users/:id", putUserHandler);
+	api.patch("/users/:id", patchUserHandler);
+	api.delete("/users/:id", deleteUserHandler);
 
 	api.get("/healthz", (_req, res) => res.send("ok"));
 
