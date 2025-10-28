@@ -5,6 +5,7 @@ import { Database } from "./database/db";
 import { addDomainHandler } from "./http/domain/add";
 import { registerUserHandler } from "./http/users/register";
 import { listUsersHandler } from "./http/users/list";
+import { loginHandler, tokenHandler } from "./http/users/login";
 
 async function main() {
 	const cfg = loadConfig();
@@ -23,6 +24,8 @@ async function main() {
 	app.post("/domain/add", addDomainHandler);
 	app.post("/users", registerUserHandler);
 	app.get("/users", listUsersHandler);
+	app.post("/users/login", loginHandler);
+	app.post("/users/token", tokenHandler);
 
 	app.get("/healthz", (_req, res) => res.send("ok"));
 
