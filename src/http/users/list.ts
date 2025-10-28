@@ -18,10 +18,16 @@ export async function listUsersHandler(req: Request, res: Response) {
     try {
         const payload: any = jwt.verify(token, getJwtSecret());
         if (!payload || payload.typ !== "at") return res.status(401).send("invalid token type");
-        if ((payload.role || "").toLowerCase() !== "admin") return res.status(403).send("forbidden");
     } catch {
         return res.status(401).send("invalid token");
     }
+
+    // 基于索引检查短token是否属于管理员
+    const tokenHash = require("crypto").createHash("sha256").update(token).digest("hex");
+    const q = `SELECT u.role FROM access_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=$1 AND t.expires_at>now()`;
+    const rs = await pool.query<{ role: string }>(q, [tokenHash]);
+    if (rs.rowCount === 0) return res.status(401).send("invalid or expired token");
+    if ((rs.rows[0].role || "").toLowerCase() !== "admin") return res.status(403).send("forbidden");
 
 	const limit = Number((req.query.limit as string) || "");
 	const offset = Number((req.query.offset as string) || "");

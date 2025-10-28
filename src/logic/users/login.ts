@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import jwt from "jsonwebtoken";
+import { createHash } from "crypto";
 import { scrypt as _scrypt, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 
@@ -16,7 +17,6 @@ export interface LoginResult {
 		uuid: string;
 		username: string;
 		email: string;
-        role?: string;
 	};
 	accessToken: string; // 短token（用于请求数据）
 	refreshToken: string; // 长token（用于换取短token）
@@ -37,33 +37,37 @@ export async function login(pool: Pool, input: LoginInput): Promise<LoginResult>
 
 	const secret = getJwtSecret();
     const accessToken = jwt.sign(
-        { sub: String(row.id), uid: row.uuid, username: row.username, email: row.email, role: row.role, typ: "at" },
+        { sub: String(row.id), uid: row.uuid, username: row.username, email: row.email, typ: "at" },
         secret,
         { expiresIn: "15m" }
     );
     const refreshToken = jwt.sign(
-        { sub: String(row.id), uid: row.uuid, role: row.role, typ: "rt" },
+        { sub: String(row.id), uid: row.uuid, typ: "rt" },
         secret,
         { expiresIn: "30d" }
     );
 
+    // 记录短token索引
+    await indexAccessToken(pool, row.id, accessToken, minutesFromNow(15));
+
 	return {
-        user: { id: row.id, uuid: row.uuid, username: row.username, email: row.email, role: row.role },
+        user: { id: row.id, uuid: row.uuid, username: row.username, email: row.email },
 		accessToken,
 		refreshToken,
 	};
 }
 
-export async function exchangeAccessToken(refreshToken: string): Promise<string> {
+export async function exchangeAccessToken(pool: Pool, refreshToken: string): Promise<string> {
 	const secret = getJwtSecret();
 	try {
 		const payload = jwt.verify(refreshToken, secret) as any;
 		if (!payload || payload.typ !== "rt") throw new Error("invalid token type");
         const accessToken = jwt.sign(
-            { sub: payload.sub, uid: payload.uid, role: payload.role, typ: "at" },
+            { sub: payload.sub, uid: payload.uid, typ: "at" },
             secret,
             { expiresIn: "15m" }
         );
+        await indexAccessToken(pool, Number(payload.sub), accessToken, minutesFromNow(15));
 		return accessToken;
 	} catch (e) {
 		throw new Error("invalid refresh token");
@@ -83,21 +87,22 @@ export async function loginWithRefreshToken(pool: Pool, refreshToken: string): P
 
 	const userId = Number(payload.sub);
 	if (!Number.isFinite(userId) || userId <= 0) throw new Error("invalid refresh token");
-    const ures = await pool.query<{ id: number; uuid: string; username: string; email: string; role: string }>(
-        "SELECT id, uuid::text AS uuid, username, email, role FROM users WHERE id=$1",
+    const ures = await pool.query<{ id: number; uuid: string; username: string; email: string }>(
+        "SELECT id, uuid::text AS uuid, username, email FROM users WHERE id=$1",
 		[userId]
 	);
 	if (ures.rowCount === 0) throw new Error("invalid refresh token");
 	const user = ures.rows[0];
 
     const accessToken = jwt.sign(
-        { sub: String(user.id), uid: user.uuid, username: user.username, email: user.email, role: user.role, typ: "at" },
+        { sub: String(user.id), uid: user.uuid, username: user.username, email: user.email, typ: "at" },
         secret,
         { expiresIn: "15m" }
     );
+    await indexAccessToken(pool, user.id, accessToken, minutesFromNow(15));
 
 	return {
-        user: { id: user.id, uuid: user.uuid, username: user.username, email: user.email, role: user.role },
+        user: { id: user.id, uuid: user.uuid, username: user.username, email: user.email },
 		accessToken,
 		refreshToken,
 	};
@@ -123,6 +128,24 @@ function getJwtSecret(): string {
 		(global as any).__JWT_SECRET_DEV__ = require("crypto").randomBytes(32).toString("hex");
 	}
 	return (global as any).__JWT_SECRET_DEV__;
+}
+
+function hashToken(token: string): string {
+    return createHash("sha256").update(token).digest("hex");
+}
+
+async function indexAccessToken(pool: Pool, userId: number, token: string, expiresAt: Date): Promise<void> {
+    const tokenHash = hashToken(token);
+    await pool.query(
+        `INSERT INTO access_tokens (token_hash, user_id, expires_at)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (token_hash) DO UPDATE SET user_id=EXCLUDED.user_id, expires_at=EXCLUDED.expires_at`,
+        [tokenHash, userId, expiresAt.toISOString()]
+    );
+}
+
+function minutesFromNow(m: number): Date {
+    return new Date(Date.now() + m * 60 * 1000);
 }
 
 

@@ -30,10 +30,12 @@ export async function loginHandler(req: Request, res: Response) {
 
 export async function tokenHandler(req: Request, res: Response) {
 	if (req.method !== "POST") return res.status(405).send("method not allowed");
+    const pool = req.app.get("pool") as Pool | undefined;
+    if (!pool) return res.status(500).send("database not initialized");
 	const { refresh_token } = (req.body || {}) as { refresh_token?: string };
 	if (!refresh_token) return res.status(400).send("refresh_token is required");
 	try {
-		const accessToken = await exchangeAccessToken(refresh_token);
+        const accessToken = await exchangeAccessToken(pool, refresh_token);
 		return res.json({ access_token: accessToken });
 	} catch {
 		return res.status(401).send("invalid refresh token");
