@@ -4,7 +4,7 @@ import { loadConfig } from "./config";
 import { Database } from "./database/db";
 import { addDomainHandler } from "./http/domain/add";
 import { registerUserHandler } from "./http/users/register";
-import { listUsersHandler } from "./http/users/list";
+import { getAllUsersHandler } from "./http/users/list";
 import { loginHandler, tokenHandler } from "./http/users/login";
 
 async function main() {
@@ -21,14 +21,17 @@ async function main() {
 	app.use(express.json());
 	app.set("pool", db.pool);
 
-	app.post("/domain/add", addDomainHandler);
-	app.post("/users", registerUserHandler);
-	app.get("/users", listUsersHandler);
-	app.post("/users/login", loginHandler);
-	app.post("/users/token", tokenHandler);
+	const api = express.Router();
 
-	app.get("/healthz", (_req, res) => res.send("ok"));
+	api.post("/domain/add", addDomainHandler);
+	api.post("/auth/register", registerUserHandler);
+	api.post("/auth/login", loginHandler);
+	api.post("/auth/token", tokenHandler);
+	api.get("/users/all", getAllUsersHandler);
 
+	api.get("/healthz", (_req, res) => res.send("ok"));
+
+	app.use("/api/v1", api);
 	app.listen(cfg.port, () => {
 		console.log(`server listening on :${cfg.port}`);
 	});

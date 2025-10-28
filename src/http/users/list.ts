@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { listUsers } from "../../logic/users/list";
 import jwt from "jsonwebtoken";
 
-export async function listUsersHandler(req: Request, res: Response) {
+export async function getAllUsersHandler(req: Request, res: Response) {
 	if (req.method !== "GET") {
 		return res.status(405).send("method not allowed");
 	}
