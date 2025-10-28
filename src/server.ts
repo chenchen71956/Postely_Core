@@ -5,6 +5,7 @@ import { Database } from "./database/db";
 import { addDomainHandler } from "./http/domain/add";
 import { registerUserHandler } from "./http/users/register";
 import { getAllUsersHandler } from "./http/users/list";
+import { getUserByUUIDHandler } from "./http/users/get";
 import { loginHandler, tokenHandler } from "./http/users/login";
 
 async function main() {
@@ -28,6 +29,7 @@ async function main() {
 	api.post("/auth/login", loginHandler);
 	api.post("/auth/token", tokenHandler);
 	api.get("/users/all", getAllUsersHandler);
+	api.get("/users/:uuid", getUserByUUIDHandler);
 
 	api.get("/healthz", (_req, res) => res.send("ok"));
 
