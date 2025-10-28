@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Pool } from "pg";
-import { registerUser, RegisterInput, PublicUser } from "../../logic/users/register";
+import { registerAndIssueTokens, RegisterInput, RegisterAndTokensResult } from "../../logic/users/register";
 
 export async function registerUserHandler(req: Request, res: Response) {
 	if (req.method !== "POST") {
@@ -17,13 +17,23 @@ export async function registerUserHandler(req: Request, res: Response) {
 	if (!email) return res.status(400).send("email is required");
 	if (!password) return res.status(400).send("password is required");
 
-	try {
-		const user: PublicUser = await registerUser(pool, { username, email, password });
-		return res.status(201).json(user);
+    try {
+        const result: RegisterAndTokensResult = await registerAndIssueTokens(pool, { username, email, password });
+        return res.status(201).json({
+            user: {
+                id: result.id,
+                uuid: result.uuid,
+                username: result.username,
+                email: result.email,
+                created_at: result.created_at,
+            },
+            access_token: result.accessToken,
+            refresh_token: result.refreshToken,
+        });
 	} catch (e: any) {
 		const msg = String(e?.message || e || "error");
 		if (msg.includes("already exists")) return res.status(409).send(msg);
-		if (msg.includes("required") || msg.includes("at least")) return res.status(400).send(msg);
+        if (msg.includes("required") || msg.includes("at least") || msg.includes("invalid email")) return res.status(400).send(msg);
 		return res.status(500).send("internal error");
 	}
 }
