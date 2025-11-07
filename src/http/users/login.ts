@@ -8,6 +8,13 @@ export async function loginHandler(req: Request, res: Response) {
 	if (!pool) return res.status(500).send("database not initialized");
 
 	const { identifier, password, refresh_token } = (req.body || {}) as { identifier?: string; password?: string; refresh_token?: string };
+    if ((process.env.DEBUG_AUTH || "") === "1") {
+        try {
+            const keys = Object.keys((req.body as any) || {});
+            const hasPwdSpace = typeof password === "string" && password !== password.trim();
+            console.log("[auth] ctype=", req.headers["content-type"], "keys=", keys, "identifier=", String(identifier || "").slice(0, 80), "pwd_len=", typeof password === "string" ? password.length : -1, "pwd_trim_changed=", hasPwdSpace);
+        } catch {}
+    }
 	try {
 		// 若提供长token，则直接跳过口令校验，签发短token并返回用户信息
 		if ((refresh_token || "").trim()) {
@@ -22,7 +29,13 @@ export async function loginHandler(req: Request, res: Response) {
 		});
 	} catch (e: any) {
 		const msg = String(e?.message || e || "error");
-		if (msg.includes("invalid credentials")) return res.status(401).send("invalid credentials");
+		if (msg.includes("invalid credentials")) {
+			if ((process.env.DEBUG_AUTH || "") === "1") {
+				// 在调试模式下返回更具体的原因，便于定位（切勿在生产泄露细节）
+				return res.status(401).send(msg);
+			}
+			return res.status(401).send("invalid credentials");
+		}
 		if (msg.includes("required") || msg.includes("invalid refresh token")) return res.status(400).send(msg);
 		return res.status(500).send("internal error");
 	}

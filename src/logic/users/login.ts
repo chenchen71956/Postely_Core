@@ -23,17 +23,36 @@ export interface LoginResult {
 }
 
 export async function login(pool: Pool, input: LoginInput): Promise<LoginResult> {
-	const identifier = (input.identifier || "").trim();
+	const rawIdentifier = (input.identifier || "").trim();
+	const identifier = rawIdentifier.includes("@") ? rawIdentifier.toLowerCase() : rawIdentifier;
 	const password = input.password || "";
 	if (!identifier) throw new Error("identifier is required");
 	if (!password) throw new Error("password is required");
 
-    const sql = `SELECT id, uuid::text AS uuid, username, email, password_hash, role FROM users WHERE username=$1 OR email=$1 LIMIT 1`;
-    const res = await pool.query<{ id: number; uuid: string; username: string; email: string; password_hash: string; role: string }>(sql, [identifier]);
-	if (res.rowCount === 0) throw new Error("invalid credentials");
+	    const sql = `SELECT id, uuid::text AS uuid, username, email, password_hash, role FROM users WHERE username=$1 OR lower(email)=lower($1) LIMIT 1`;
+	    const res = await pool.query<{ id: number; uuid: string; username: string; email: string; password_hash: string; role: string }>(sql, [identifier]);
+		if (res.rowCount === 0) {
+			if ((process.env.DEBUG_AUTH || "") === "1") {
+				console.log("[auth] user not found for identifier:", identifier);
+			}
+			throw new Error("invalid credentials: user_not_found");
+		}
 	const row = res.rows[0];
 
-	await verifyPassword(password, row.password_hash);
+		if ((process.env.DEBUG_AUTH || "") === "1") {
+			console.log("[auth] verifying password for user id:", row.id);
+		}
+		try {
+			await verifyPassword(password, row.password_hash);
+			if ((process.env.DEBUG_AUTH || "") === "1") {
+				console.log("[auth] password ok for user id:", row.id);
+			}
+		} catch (e) {
+			if ((process.env.DEBUG_AUTH || "") === "1") {
+				console.log("[auth] password mismatch for user id:", row.id);
+			}
+			throw e;
+		}
 
 	const secret = getJwtSecret();
     const accessToken = jwt.sign(
@@ -111,12 +130,26 @@ export async function loginWithRefreshToken(pool: Pool, refreshToken: string): P
 async function verifyPassword(password: string, stored: string): Promise<void> {
 	// 格式: scrypt$<salt>$<hashBase64>
 	const parts = (stored || "").split("$");
-	if (parts.length !== 3 || parts[0] !== "scrypt") throw new Error("invalid credentials");
+	if (parts.length !== 3 || parts[0] !== "scrypt") {
+		if ((process.env.DEBUG_AUTH || "") === "1") {
+			console.log("[auth] bad hash format:", parts[0], "parts_len=", parts.length);
+		}
+		throw new Error("invalid credentials: bad_hash_format");
+	}
 	const salt = Buffer.from(parts[1], "base64");
 	const expected = Buffer.from(parts[2], "base64");
-	const actual = await scrypt(password, salt, expected.length);
-	if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
-		throw new Error("invalid credentials");
+    const pwd = (password || "").normalize("NFKC").trim();
+    if ((process.env.DEBUG_AUTH || "") === "1") {
+        console.log("[auth] hash_meta algo=scrypt salt_len=", salt.length, "exp_len=", expected.length, "normalized=", true);
+    }
+	const actual = await scrypt(pwd, salt, expected.length);
+	const sameLen = actual.length === expected.length;
+	const sameHash = sameLen && timingSafeEqual(actual, expected);
+	if (!sameHash) {
+		if ((process.env.DEBUG_AUTH || "") === "1") {
+			console.log("[auth] hash_compare mismatch: act_len=", actual.length, "exp_len=", expected.length);
+		}
+		throw new Error("invalid credentials: password_mismatch");
 	}
 }
 

@@ -22,14 +22,15 @@ export interface PublicUser {
 export async function registerUser(pool: Pool, input: RegisterInput): Promise<PublicUser> {
 	const username = (input.username || "").trim();
     const email = (input.email || "").trim().toLowerCase();
-	const password = input.password || "";
+    const rawPassword = input.password || "";
+    const password = rawPassword.normalize("NFKC").trim();
 	if (!username) throw new Error("username is required");
 	if (!email) throw new Error("email is required");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("invalid email");
     if (!password || password.length < 8) throw new Error("password must be at least 8 characters");
 
 	const salt = randomBytes(16).toString("base64");
-	const hash = (await scrypt(password, salt, 64)).toString("base64");
+    const hash = (await scrypt(password, salt, 64)).toString("base64");
 	const passwordHash = `scrypt$${salt}$${hash}`;
 
 	const sql = `

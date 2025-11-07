@@ -6,7 +6,8 @@
 	"scripts": {
 		"build": "tsc -p tsconfig.json",
 		"start": "node dist/server.js",
-		"dev": "ts-node --transpile-only src/server.ts"
+		"dev": "ts-node --transpile-only src/server.ts",
+		"dev:all": "concurrently -n api,web -c magenta,cyan \"npm run dev\" \"npm --prefix frontend run dev\""
 	},
 	"dependencies": {
 		"dotenv": "^16.4.5",
@@ -19,6 +20,7 @@
 		"@types/node": "^20.11.30",
 		"@types/jsonwebtoken": "^9.0.6",
 		"@types/pg": "^8.10.2",
+		"concurrently": "^9.0.1",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.6.3"
 	}
